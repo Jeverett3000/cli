@@ -1,122 +1,38 @@
+# Use the latest 2.1 version of CircleCI pipeline process engine.
+# See: https://circleci.com/docs/2.0/configuration-reference
 version: 2.1
 
-defaults: &defaults
-  working_directory: ~/react-native-cli
-
-executors:
-  node12:
-    <<: *defaults
+# Define a job to be invoked later in a workflow.
+# See: https://circleci.com/docs/2.0/configuration-reference/#jobs
+jobs:
+  test:
+    # Specify the execution environment. You can specify an image from Dockerhub or use one of our Convenience Images from CircleCI's Developer Hub.
+    # See: https://circleci.com/docs/2.0/configuration-reference/#docker-machine-macos-windows-executor
     docker:
-      - image: circleci/node:erbium
-  nodelts:
-    <<: *defaults
-    docker:
-      - image: circleci/node:lts
-  noderuby:
-    <<: *defaults
-    docker:
-      - image: circleci/ruby:2.4-node
-  reactnative:
-    <<: *defaults
-    docker:
-      - image: reactnativecommunity/react-native-android
-
-commands:
-  install-dependencies:
+      - image: cimg/node:15.1
+    # Add steps to the job
+    # See: https://circleci.com/docs/2.0/configuration-reference/#steps
     steps:
       - checkout
-      - attach_workspace:
-          at: ~/react-native-cli
       - restore_cache:
+          # See the configuration reference documentation for more details on using restore_cache and save_cache steps
+          # https://circleci.com/docs/2.0/configuration-reference/?section=reference#save_cache
           keys:
-            - v2-dependencies-{{ checksum "package.json" }}
-            - v2-dependencies-
-      - run: yarn --frozen-lockfile
+            - node-deps-v1-{{ .Branch }}-{{checksum "package-lock.json"}}
+      - run:
+          name: install packages
+          command: npm ci
       - save_cache:
-          key: v2-dependencies-{{ checksum "package.json" }}
+          key: node-deps-v1-{{ .Branch }}-{{checksum "package-lock.json"}}
           paths:
-            - node_modules
-      - persist_to_workspace:
-          root: .
-          paths:
-            - .
+            - ~/.npm
+      - run:
+          name: Run Tests
+          command: npm run test
 
-  install-cocoapods:
-    steps:
-      - attach_workspace:
-          at: ~/react-native-cli
-      - run: gem install cocoapods
-
-  run-lint:
-    steps:
-      - attach_workspace:
-          at: ~/react-native-cli
-      - run: yarn lint
-  run-unit-tests:
-    steps:
-      - attach_workspace:
-          at: ~/react-native-cli
-      - run: yarn test:ci:unit
-      - store_artifacts:
-          path: coverage
-          destination: coverage
-  run-e2e-tests:
-    steps:
-      - attach_workspace:
-          at: ~/react-native-cli
-      - restore_cache:
-          keys:
-            - v2-gradle-dependencies-{{ checksum "package.json" }}
-            - v2-gradle-dependencies-
-      - run: yarn test:ci:e2e
-      - save_cache:
-          key: v2-gradle-dependencies-{{ checksum "package.json" }}
-          paths:
-            - ~/.gradle
-
-jobs:
-  setup:
-    executor: node12
-    steps:
-      - install-dependencies
-  lint:
-    executor: node12
-    steps:
-      - run-lint
-  cocoa-pods:
-    executor: noderuby
-    steps:
-      - install-cocoapods
-      - run-cocoa-pods-tests
-  unit-tests:
-    executor: node12
-    steps:
-      - run-unit-tests
-  e2e-tests:
-    executor: reactnative
-    steps:
-      - run-e2e-tests
-  lts-tests:
-    executor: nodelts
-    steps:
-      - install-dependencies
-      - run-lint
-      - run-unit-tests
-      # TODO: figure out why e2e tests fail even though not interfering with
-      # other tests
-      # - run-e2e-tests
-
+# Invoke jobs via workflows
+# See: https://circleci.com/docs/2.0/configuration-reference/#workflows
 workflows:
-  build-and-test:
+  orb-free-workflow:
     jobs:
-      - setup
-      - lint:
-          requires:
-            - setup
-      - unit-tests:
-          requires:
-            - setup
-      - e2e-tests:
-          requires:
-            - setup
-      - lts-tests
+      - test
